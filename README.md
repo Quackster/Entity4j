@@ -37,7 +37,7 @@ Entity4j is a minimal, type-safe object relational mapper for Java. It lets you 
 
 ### Gradle
 
-Add the [JitPack](https://jitpack.io/#lovepigeons/Entity4j) repository:
+Add the [JitPack](https://jitpack.io/#Quackster/Entity4j) repository:
 
 ```groovy
 repositories {
@@ -49,13 +49,13 @@ Then add the dependency:
 
 ```groovy
 dependencies {
-    implementation 'com.github.lovepigeons:Entity4j:v1.0.26'
+    implementation 'com.github.Quackster:Entity4j:v1.0.26'
 }
 ```
 
 ### Maven
 
-Add the [JitPack](https://jitpack.io/#lovepigeons/Entity4j) repository:
+Add the [JitPack](https://jitpack.io/#Quackster/Entity4j) repository:
 
 ```xml
 <repositories>
@@ -71,7 +71,7 @@ Then add the dependency:
 ```xml
 <dependencies>
     <dependency>
-        <groupId>com.github.lovepigeons</groupId>
+        <groupId>com.github.Quackster</groupId>
         <artifactId>Entity4j</artifactId>
         <version>v1.0.26</version>
     </dependency>
