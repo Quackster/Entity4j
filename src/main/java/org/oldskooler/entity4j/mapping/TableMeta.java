@@ -127,7 +127,7 @@ public final class TableMeta<T> {
 
             p2f.put(prop, f);
             p2c.put(prop, col);
-            cols.put(col, new ColumnMeta(prop, col, nullable, typeOverride, defaultValue, precision, scale, length, ignored));
+            cols.put(col, new ColumnMeta(prop, col, nullable, defaultValue, typeOverride, precision, scale, length, ignored));
         }
 
         return new TableMeta<>(type, tableName, keys, p2c, p2f, cols);

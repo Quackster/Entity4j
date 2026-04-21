@@ -15,13 +15,21 @@ public final class BatchSqlUtils {
     }
 
     public static <T> String buildMultiRowInsertSql(SqlDialect dialect, TableMeta<T> m, List<String> cols, int rows) {
+        return buildMultiRowInsertSql(dialect, m, cols, rows, dialect.useInsertReturning());
+    }
+
+    public static <T> String buildMultiRowInsertSql(SqlDialect dialect,
+                                                    TableMeta<T> m,
+                                                    List<String> cols,
+                                                    int rows,
+                                                    boolean includeReturning) {
         String colList = String.join(", ", cols.stream().map(dialect::q).toArray(String[]::new));
         String rowPlaceholders = "(" + String.join(", ", Collections.nCopies(cols.size(), "?")) + ")";
         String values = String.join(", ", Collections.nCopies(rows, rowPlaceholders));
         String sql = "INSERT INTO " + dialect.q(m.table) + " (" + colList + ") VALUES " + values;
 
         // Only add RETURNING if exactly one auto PK
-        if (dialect.useInsertReturning() && PrimaryKeyUtils.getSingleAutoPk(m).isPresent()) {
+        if (includeReturning && PrimaryKeyUtils.getSingleAutoPk(m).isPresent()) {
             sql = sql + " " + dialect.insertReturningSuffix(m);
         }
         return sql;

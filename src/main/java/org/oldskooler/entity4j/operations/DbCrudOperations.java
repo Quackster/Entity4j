@@ -10,6 +10,7 @@ import org.oldskooler.entity4j.util.ReflectionUtils;
 import java.lang.reflect.Field;
 import java.sql.*;
 import java.util.*;
+import java.util.Locale;
 
 /**
  * Handles single-entity CRUD operations (Create, Read, Update, Delete)
@@ -42,8 +43,8 @@ public class DbCrudOperations {
 
                 if (m.columns.get(e.getValue()).ignored) continue;
 
-                // Skip if value is the default for its Java type
-                if (isDefaultJavaValue(m.propToField.get(prop), values.get(prop))) {
+                // Only omit null values so explicit false/0 values round-trip consistently.
+                if (values.get(prop) == null) {
                     continue;
                 }
 
@@ -51,11 +52,21 @@ public class DbCrudOperations {
                 params.add(values.get(prop));
             }
 
-            String sql = context.dialect().buildInsertSql(m, cols);
-
             // If the dialect uses "RETURNING id" and we have exactly one auto PK
             Optional<Map.Entry<String, PrimaryKey>> singleAuto = PrimaryKeyUtils.getSingleAutoPk(m);
-            if (context.dialect().useInsertReturning() && singleAuto.isPresent()) {
+            boolean useInsertReturning = context.dialect().useInsertReturning()
+                    && singleAuto.isPresent()
+                    && supportsInsertReturningExecution();
+
+            String sql = context.dialect().buildInsertSql(m, cols);
+            if (!useInsertReturning && context.dialect().useInsertReturning()) {
+                String suffix = context.dialect().insertReturningSuffix(m);
+                if (!suffix.isEmpty() && sql.endsWith(suffix)) {
+                    sql = sql.substring(0, sql.length() - suffix.length());
+                }
+            }
+
+            if (useInsertReturning) {
                 Field idField = m.propToField.get(singleAuto.get().getValue().property);
                 try (PreparedStatement ps = context.conn().prepareStatement(sql)) {
                     JdbcParamBinder.bindParams(ps, params);
@@ -90,41 +101,14 @@ public class DbCrudOperations {
         }
     }
 
-    private boolean isDefaultJavaValue(Field field, Object value) {
-        Class<?> type = field.getType();
-
-        if (value == null) {
-            // For primitives, null means we treat it as default
+    private boolean supportsInsertReturningExecution() {
+        try {
+            DatabaseMetaData metaData = context.conn().getMetaData();
+            String productName = metaData.getDatabaseProductName();
+            return productName == null || !productName.toLowerCase(Locale.ROOT).contains("h2");
+        } catch (SQLException ignored) {
             return true;
         }
-
-        if (type == boolean.class || type == Boolean.class) {
-            return Boolean.FALSE.equals(value);
-        }
-        if (type == byte.class || type == Byte.class) {
-            return ((Byte) value) == 0;
-        }
-        if (type == short.class || type == Short.class) {
-            return ((Short) value) == 0;
-        }
-        if (type == int.class || type == Integer.class) {
-            return ((Integer) value) == 0;
-        }
-        if (type == long.class || type == Long.class) {
-            return ((Long) value) == 0L;
-        }
-        if (type == float.class || type == Float.class) {
-            return ((Float) value) == 0f;
-        }
-        if (type == double.class || type == Double.class) {
-            return ((Double) value) == 0d;
-        }
-        if (type == char.class || type == Character.class) {
-            return ((Character) value) == '\u0000'; // default char
-        }
-
-        // For String and all other reference types, only null is default.
-        return false;
     }
 
     public <T> int update(T entity) {

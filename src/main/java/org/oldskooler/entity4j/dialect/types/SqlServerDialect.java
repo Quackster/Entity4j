@@ -184,4 +184,25 @@ public class SqlServerDialect implements SqlDialect {
         // not used for SQL Server; rely on JDBC getGeneratedKeys()
         return "";
     }
+
+    @Override
+    public String paginate(String selectSql, String groupByClause, String orderByClause, Integer limit, Integer offset) {
+        if (limit == null && offset == null) {
+            return selectSql;
+        }
+
+        StringBuilder sql = new StringBuilder(selectSql);
+        String lowerSql = selectSql.toLowerCase(Locale.ROOT);
+
+        if (!lowerSql.contains(" order by ")) {
+            sql.append(" ORDER BY (SELECT 1)");
+        }
+
+        sql.append(" OFFSET ").append(offset == null ? 0 : offset).append(" ROWS");
+        if (limit != null) {
+            sql.append(" FETCH NEXT ").append(limit).append(" ROWS ONLY");
+        }
+
+        return sql.toString();
+    }
 }

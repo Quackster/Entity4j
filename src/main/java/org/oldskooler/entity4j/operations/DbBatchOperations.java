@@ -1,6 +1,7 @@
 package org.oldskooler.entity4j.operations;
 
 import org.oldskooler.entity4j.IDbContext;
+import org.oldskooler.entity4j.dialect.types.SqliteDialect;
 import org.oldskooler.entity4j.mapping.PrimaryKey;
 import org.oldskooler.entity4j.mapping.TableMeta;
 import org.oldskooler.entity4j.util.BatchSqlUtils;
@@ -11,6 +12,7 @@ import org.oldskooler.entity4j.util.ReflectionUtils;
 import java.lang.reflect.Field;
 import java.sql.*;
 import java.util.*;
+import java.util.Locale;
 
 /**
  * Handles batch CRUD operations for multiple entities
@@ -32,6 +34,18 @@ public class DbBatchOperations {
         TableMeta<T> m = TableMeta.of(t, context.mappingRegistry());
 
         try {
+            Optional<Map.Entry<String, PrimaryKey>> singleAuto = PrimaryKeyUtils.getSingleAutoPk(m);
+
+            // SQLite does not reliably expose all generated keys for multi-row inserts.
+            if (context.dialect() instanceof SqliteDialect && singleAuto.isPresent()) {
+                DbCrudOperations crudOperations = new DbCrudOperations(context);
+                int total = 0;
+                for (T entity : entities) {
+                    total += crudOperations.insert(entity);
+                }
+                return total;
+            }
+
             // Column order (excluding auto PK props)
             Set<String> autoPkProps = PrimaryKeyUtils.getAutoPkProps(m);
             List<String> cols = new ArrayList<>();
@@ -53,12 +67,13 @@ public class DbBatchOperations {
                     chunk.add(it.next());
                 }
 
-                // Build single SQL: INSERT INTO t (c1,c2) VALUES (?,?),(?,?)...
-                String sql = BatchSqlUtils.buildMultiRowInsertSql(context.dialect(), m, cols, chunk.size());
+                // If dialect supports RETURNING and the backing database actually executes it, keep it.
+                boolean wantsReturningIds = context.dialect().useInsertReturning()
+                        && singleAuto.isPresent()
+                        && supportsInsertReturningExecution();
 
-                // If dialect supports RETURNING and we have exactly one auto PK, keep it
-                Optional<Map.Entry<String, PrimaryKey>> singleAuto = PrimaryKeyUtils.getSingleAutoPk(m);
-                boolean wantsReturningIds = context.dialect().useInsertReturning() && singleAuto.isPresent();
+                // Build single SQL: INSERT INTO t (c1,c2) VALUES (?,?),(?,?)...
+                String sql = BatchSqlUtils.buildMultiRowInsertSql(context.dialect(), m, cols, chunk.size(), wantsReturningIds);
 
                 if (wantsReturningIds) {
                     Field idField = m.propToField.get(singleAuto.get().getValue().property);
@@ -107,6 +122,16 @@ public class DbBatchOperations {
             return total;
         } catch (SQLException ex) {
             throw new RuntimeException("insertAll failed", ex);
+        }
+    }
+
+    private boolean supportsInsertReturningExecution() {
+        try {
+            DatabaseMetaData metaData = context.conn().getMetaData();
+            String productName = metaData.getDatabaseProductName();
+            return productName == null || !productName.toLowerCase(Locale.ROOT).contains("h2");
+        } catch (SQLException ignored) {
+            return true;
         }
     }
 
